@@ -6,9 +6,35 @@ import (
 	"os"
 
 	v1 "k8s.io/api/core/v1"
+	storageV1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+func CheckCreateStorageClass(ctx context.Context, r *StoragePoolReconciler) error {
+	storageClass := storageV1.StorageClass{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "storage.k8s.io/v1",
+			Kind:       "StorageClass",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: os.Getenv("NEW_STORAGE_CLASS"), // TODO: SetUp the NEW_STORAGE_CLASS environment variable in the deployment manifest
+		},
+		Provisioner: "pd.csi.storage.gke.io",
+		Parameters: map[string]string{
+			"type":                             "hyperdisk-balanced",
+			"provisioned-iops-on-create":       "3000",  // Minimum is 3,000 baseline
+			"provisioned-throughput-on-create": "140Mi", // Minimum is 140MiB/s baseline
+		},
+		VolumeBindingMode:    new(storageV1.VolumeBindingWaitForFirstConsumer),
+		AllowVolumeExpansion: new(true),
+	}
+	if err := r.Create(ctx, &storageClass); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func GetVolumeClaimSpec(ctx context.Context, r *StoragePoolReconciler, pvcNAME string, namespace string) (v1.PersistentVolumeClaimSpec, error) {
 	var pvc v1.PersistentVolumeClaim
@@ -18,14 +44,22 @@ func GetVolumeClaimSpec(ctx context.Context, r *StoragePoolReconciler, pvcNAME s
 	return pvc.Spec, nil
 }
 
-func DeleteVolumeClaims(ctx context.Context, r *StoragePoolReconciler, pvcNAME string, namespace string) error {
+func DeleteOrRenameVolumeClaims(ctx context.Context, r *StoragePoolReconciler, pvcNAME string, namespace string) error {
 	var pvc v1.PersistentVolumeClaim
+	var deleteVolumeClaim = os.Getenv("DELETE_OLD_VOLUME_CLAIMS")
 	if err := r.Get(ctx, types.NamespacedName{Name: pvcNAME, Namespace: namespace}, &pvc); err != nil {
 		return err
 	}
 
-	if err := r.Delete(ctx, &pvc); err != nil {
-		return err
+	if deleteVolumeClaim == "true" {
+		if err := r.Delete(ctx, &pvc); err != nil {
+			return err
+		}
+	} else {
+		pvc.Name = pvc.Name + "-old"
+		if err := r.Update(ctx, &pvc); err != nil {
+			return err
+		}
 	}
 	return nil
 }

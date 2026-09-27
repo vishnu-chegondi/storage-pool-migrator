@@ -53,6 +53,11 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Create the StorageClass if it does not exist
+	if err := CheckCreateStorageClass(ctx, r); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Create volume snapshots for each volume claim
 	for _, volume := range deployment.Spec.Template.Spec.Volumes {
 		var volumeClaimSpec coreV1.PersistentVolumeClaimSpec
@@ -69,7 +74,7 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 
-		if err := DeleteVolumeClaims(ctx, r, volume.PersistentVolumeClaim.ClaimName, deployment.Namespace); err != nil {
+		if err := DeleteOrRenameVolumeClaims(ctx, r, volume.PersistentVolumeClaim.ClaimName, deployment.Namespace); err != nil {
 			return ctrl.Result{}, err
 		}
 
