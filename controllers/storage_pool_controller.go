@@ -83,6 +83,11 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	// Update the deployment with the new tolerations
+	if err := UpdateDeploymentWithTolerations(ctx, r, &deployment); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, err
 }
 
