@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	v1 "k8s.io/api/core/v1"
 	storageV1 "k8s.io/api/storage/v1"
@@ -12,13 +11,18 @@ import (
 )
 
 func CheckCreateStorageClass(ctx context.Context, r *StoragePoolReconciler) error {
+	storageCLASSNAME, err := GetMigrationConfigMapDataValue(ctx, r, "NEW_STORAGE_CLASS")
+	if err != nil {
+		return err
+	}
+
 	storageClass := storageV1.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "storage.k8s.io/v1",
 			Kind:       "StorageClass",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: os.Getenv("NEW_STORAGE_CLASS"), // TODO: SetUp the NEW_STORAGE_CLASS environment variable in the deployment manifest
+			Name: storageCLASSNAME,
 		},
 		Provisioner: "pd.csi.storage.gke.io",
 		Parameters: map[string]string{
@@ -46,7 +50,11 @@ func GetVolumeClaimSpec(ctx context.Context, r *StoragePoolReconciler, pvcNAME s
 
 func DeleteOrRenameVolumeClaims(ctx context.Context, r *StoragePoolReconciler, pvcNAME string, namespace string) error {
 	var pvc v1.PersistentVolumeClaim
-	var deleteVolumeClaim = os.Getenv("DELETE_OLD_VOLUME_CLAIMS")
+	deleteVolumeClaim, err := GetMigrationConfigMapDataValue(ctx, r, "DELETE_OLD_VOLUME_CLAIMS")
+	if err != nil {
+		return err
+	}
+
 	if err := r.Get(ctx, types.NamespacedName{Name: pvcNAME, Namespace: namespace}, &pvc); err != nil {
 		return err
 	}
@@ -65,6 +73,11 @@ func DeleteOrRenameVolumeClaims(ctx context.Context, r *StoragePoolReconciler, p
 }
 
 func CreateNewVolumeClaims(ctx context.Context, r *StoragePoolReconciler, pvcNAME string, namespace string, volumeClaimSpec v1.PersistentVolumeClaimSpec) error {
+	storageCLASSNAME, err := GetMigrationConfigMapDataValue(ctx, r, "NEW_STORAGE_CLASS")
+	if err != nil {
+		return err
+	}
+
 	var pvc v1.PersistentVolumeClaim
 	if err := r.Get(ctx, types.NamespacedName{Name: pvcNAME, Namespace: namespace}, &pvc); err == nil {
 		return fmt.Errorf("VolumeClaim %s already exists", pvcNAME)
@@ -84,7 +97,7 @@ func CreateNewVolumeClaims(ctx context.Context, r *StoragePoolReconciler, pvcNAM
 				v1.ReadWriteOnce,
 			},
 			Resources:        volumeClaimSpec.Resources,
-			StorageClassName: new(os.Getenv("NEW_STORAGE_CLASS")), // TODO: SetUp the NEW_STORAGE_CLASS environment variable in the deployment manifest
+			StorageClassName: &storageCLASSNAME,
 			DataSource: &v1.TypedLocalObjectReference{
 				Kind:     "VolumeSnapshot",
 				Name:     pvcNAME + "-snapshot",

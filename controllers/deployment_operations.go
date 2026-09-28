@@ -28,17 +28,12 @@ func ScaleDeployment(ctx context.Context, r *StoragePoolReconciler, deployment *
 }
 
 func GetNewTolerations(ctx context.Context, r *StoragePoolReconciler) ([]corev1.Toleration, error) {
-	migrationCONFIGMAP, err := GetMigrationConfigMap(ctx, r)
+	tolerationYAML, err := GetMigrationConfigMapDataValue(ctx, r, "tolerations.yaml")
 	if err != nil {
 		return []corev1.Toleration{}, err
 	}
 
-	if tolerationYAML, exists := migrationCONFIGMAP.Data["tolerations.yaml"]; exists == false || tolerationYAML == "" {
-		return []corev1.Toleration{}, nil
-	}
-
 	var toleration []corev1.Toleration
-	tolerationYAML, _ := migrationCONFIGMAP.Data["tolerations.yaml"]
 	if err := yaml.Unmarshal([]byte(tolerationYAML), &toleration); err != nil {
 		return []corev1.Toleration{}, err
 	}
