@@ -48,6 +48,7 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	var originalREPLICAS = *deployment.Spec.Replicas
+	storagePoolMC := NewStoragePoolMigrationCondition(&deployment, r)
 	defer func() {
 		if scaleError := ScaleDeployment(ctx, r, &deployment, originalREPLICAS); scaleError != nil {
 			logger.Error(scaleError, "Failed to scale deployment back to original replicas: ", originalREPLICAS, "Deployment: ", deployment.Name)
@@ -62,45 +63,45 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Scale down the deployment to 0 replicas
 	if err := ScaleDeployment(ctx, r, &deployment, 0); err != nil {
-		if statusErr := UpdateFailedCondition(ctx, "DeploymentScaleDown", "Failed to scale down deployment to 0 replicas"); statusErr != nil {
+		if statusErr := storagePoolMC.UpdateFailedCondition(ctx, "DeploymentScaleDown", "Failed to scale down deployment to 0 replicas"); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
 	}
-	if statusErr := UpdateSucceededCondition(ctx, "DeploymentScaleDown", "Deployment scaled down to 0 replicas"); statusErr != nil {
+	if statusErr := storagePoolMC.UpdateSucceededCondition(ctx, "DeploymentScaleDown", "Deployment scaled down to 0 replicas"); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
 	// Create the VolumeSnapshotClass if it does not exist
 	if err := CreateIfNotVolumeSnapshotClass(ctx, r); err != nil {
-		if statusErr := UpdateFailedCondition(ctx, "CreateVolumeSnapshotClass", "Failed to create VolumeSnapshotClass"); statusErr != nil {
+		if statusErr := storagePoolMC.UpdateFailedCondition(ctx, "CreateVolumeSnapshotClass", "Failed to create VolumeSnapshotClass"); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
 	}
-	if statusErr := UpdateSucceededCondition(ctx, "CreateVolumeSnapshotClass", "VolumeSnapshotClass created successfully"); statusErr != nil {
+	if statusErr := storagePoolMC.UpdateSucceededCondition(ctx, "CreateVolumeSnapshotClass", "VolumeSnapshotClass created successfully"); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
 	// Create the StorageClass if it does not exist
 	if err := CheckCreateStorageClass(ctx, r); err != nil {
-		if statusErr := UpdateFailedCondition(ctx, "CreateStorageClass", "Failed to create StorageClass"); statusErr != nil {
+		if statusErr := storagePoolMC.UpdateFailedCondition(ctx, "CreateStorageClass", "Failed to create StorageClass"); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
 	}
-	if statusErr := UpdateSucceededCondition(ctx, "CreateStorageClass", "StorageClass created successfully"); statusErr != nil {
+	if statusErr := storagePoolMC.UpdateSucceededCondition(ctx, "CreateStorageClass", "StorageClass created successfully"); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
 	// Migrate the volume claims to use the new storage class
 	if err := MigrateDeploymentVolumes(ctx, r, &deployment); err != nil {
-		if statusErr := UpdateFailedCondition(ctx, "MigrateDeploymentVolumes", "Failed to migrate deployment volumes"); statusErr != nil {
+		if statusErr := storagePoolMC.UpdateFailedCondition(ctx, "MigrateDeploymentVolumes", "Failed to migrate deployment volumes"); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, err
 	}
-	if statusErr := UpdateSucceededCondition(ctx, "MigrateDeploymentVolumes", "Deployment volumes migrated successfully"); statusErr != nil {
+	if statusErr := storagePoolMC.UpdateSucceededCondition(ctx, "MigrateDeploymentVolumes", "Deployment volumes migrated successfully"); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
@@ -109,7 +110,7 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	if err = UpdateSucceededCondition(ctx, "MigrationCompleted", "Migration completed successfully"); err != nil {
+	if err = storagePoolMC.UpdateSucceededCondition(ctx, "MigrationCompleted", "Migration completed successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil

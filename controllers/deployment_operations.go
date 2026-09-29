@@ -54,15 +54,6 @@ func UpdateDeploymentWithTolerations(ctx context.Context, r *StoragePoolReconcil
 	return nil
 }
 
-func UpdateDeploymentCondition(ctx context.Context, r *StoragePoolReconciler, deployment *v1.Deployment, condition *v1.DeploymentCondition) error {
-	newConditions := append(deployment.Status.Conditions, *condition)
-	deployment.Status.Conditions = newConditions
-	if err := r.Status().Update(ctx, deployment); err != nil {
-		return err
-	}
-	return nil
-}
-
 func MigrateDeploymentVolumes(ctx context.Context, r *StoragePoolReconciler, deployment *v1.Deployment) error {
 	for _, volume := range deployment.Spec.Template.Spec.Volumes {
 		var volumeClaimSpec corev1.PersistentVolumeClaimSpec
