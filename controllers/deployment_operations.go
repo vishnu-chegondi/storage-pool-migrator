@@ -27,6 +27,19 @@ func ScaleDeployment(ctx context.Context, r *StoragePoolReconciler, deployment *
 	return nil
 }
 
+func GetOldTolerations(ctx context.Context, r *StoragePoolReconciler) ([]corev1.Toleration, error) {
+	tolerationYAML, err := GetMigrationConfigMapDataValue(ctx, r, "old_tolerations.yaml")
+	if err != nil {
+		return []corev1.Toleration{}, err
+	}
+
+	var toleration []corev1.Toleration
+	if err := yaml.Unmarshal([]byte(tolerationYAML), &toleration); err != nil {
+		return []corev1.Toleration{}, err
+	}
+	return toleration, nil
+}
+
 func GetNewTolerations(ctx context.Context, r *StoragePoolReconciler) ([]corev1.Toleration, error) {
 	tolerationYAML, err := GetMigrationConfigMapDataValue(ctx, r, "tolerations.yaml")
 	if err != nil {
@@ -45,9 +58,27 @@ func UpdateDeploymentWithTolerations(ctx context.Context, r *StoragePoolReconcil
 	if err != nil {
 		return err
 	}
-	oldTOLERATIONS := deployment.Spec.Template.Spec.Tolerations
-	newTOLERATIONS := append(oldTOLERATIONS, migrationTOLERATIONS...)
+	currentTOLERATIONS := deployment.Spec.Template.Spec.Tolerations
+	newTOLERATIONS := append(currentTOLERATIONS, migrationTOLERATIONS...)
 	deployment.Spec.Template.Spec.Tolerations = newTOLERATIONS
+	if err := r.Update(ctx, deployment); err != nil {
+		return err
+	}
+	return nil
+}
+
+func RemoveDeploymentWithOldTolerations(ctx context.Context, r *StoragePoolReconciler, deployment *v1.Deployment) error {
+	oldTOLERATIONS, err := GetOldTolerations(ctx, r)
+	if err != nil {
+		return err
+	}
+	for t, i := range deployment.Spec.Template.Spec.Tolerations {
+		for _, old := range oldTOLERATIONS {
+			if i.Key == old.Key && i.Effect == old.Effect && i.Value == old.Value && i.Operator == old.Operator {
+				deployment.Spec.Template.Spec.Tolerations = append(deployment.Spec.Template.Spec.Tolerations[:t], deployment.Spec.Template.Spec.Tolerations[t+1:]...)
+			}
+		}
+	}
 	if err := r.Update(ctx, deployment); err != nil {
 		return err
 	}

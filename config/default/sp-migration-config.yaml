@@ -12,3 +12,8 @@ data:
         value: "true"
         operator: "Equal"
         effect: "NoSchedule"
+  old_tolerations.yaml: |
+      - key: "old-taint"
+        value: "true"
+        operator: "Equal"
+        effect: "NoSchedule"

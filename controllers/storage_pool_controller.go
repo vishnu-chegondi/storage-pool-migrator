@@ -109,6 +109,9 @@ func (r *StoragePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := UpdateDeploymentWithTolerations(ctx, r, &deployment); err != nil {
 		return ctrl.Result{}, err
 	}
+	if err := RemoveDeploymentWithOldTolerations(ctx, r, &deployment); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if err = storagePoolMC.UpdateSucceededCondition(ctx, "MigrationCompleted", "Migration completed successfully"); err != nil {
 		return ctrl.Result{}, err
